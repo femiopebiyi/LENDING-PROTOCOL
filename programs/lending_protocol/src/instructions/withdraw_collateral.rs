@@ -5,8 +5,8 @@ use anchor_spl::{
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
+use crate::helpers::health_factor;
 use crate::state::{LendingPool, StubOracle, UserPosition};
-use crate::{constants::PRICE_SCALE, helpers::health_factor};
 use crate::{errors::LendingError, helpers::accrue_interest};
 
 #[derive(Accounts)]
@@ -46,7 +46,8 @@ pub struct WithdrawCollateral<'info> {
     #[account(
         mut,
         seeds = [b"userposition", pool.key().as_ref(), withdrawer.key().as_ref()],
-        bump = user_position.bump
+        bump = user_position.bump,
+        constraint = user_position.owner.key() == withdrawer.key() @LendingError::CredentialMismatch
     )]
     pub user_position: Account<'info, UserPosition>,
 

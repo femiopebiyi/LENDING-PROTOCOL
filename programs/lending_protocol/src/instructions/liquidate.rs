@@ -35,6 +35,7 @@ pub struct Liquidate<'info> {
 
     #[account(
         mint::token_program = token_program,
+        address = pool.borrow_mint @LendingError::InvalidMint
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -74,7 +75,8 @@ pub struct Liquidate<'info> {
     #[account(
         mut,
         seeds = [b"userposition", pool.key().as_ref(), borrower.key().as_ref()],
-        bump = user_position.bump
+        bump = user_position.bump,
+        constraint = user_position.owner.key() == borrower.key() @LendingError::CredentialMismatch
     )]
     pub user_position: Account<'info, UserPosition>,
 

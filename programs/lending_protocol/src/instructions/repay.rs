@@ -21,6 +21,7 @@ pub struct Repay<'info> {
 
     #[account(
         mint::token_program = token_program,
+        address = pool.borrow_mint @LendingError::InvalidMint
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -43,7 +44,8 @@ pub struct Repay<'info> {
     #[account(
         mut,
         seeds = [b"userposition", pool.key().as_ref(), repayer.key().as_ref()],
-        bump = user_position.bump
+        bump = user_position.bump,
+        constraint = user_position.owner.key() == repayer.key() @LendingError::CredentialMismatch
     )]
     pub user_position: Account<'info, UserPosition>,
 
@@ -121,6 +123,8 @@ impl<'info> Repay<'info> {
         if self.user_position.borrowed_amount + self.user_position.interest_accrued == 0 {
             self.user_position.is_open = false;
         }
+
+        self.user_position.last_update_time = clock.unix_timestamp;
 
         Ok(())
     }
