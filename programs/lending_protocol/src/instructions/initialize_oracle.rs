@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use pyth_solana_receiver_sdk::price_update::get_feed_id_from_hex;
 
 use crate::{errors::LendingError, state::StubOracle};
 
@@ -21,14 +22,29 @@ pub struct InitializeOracle<'info> {
 }
 
 impl<'info> InitializeOracle<'info> {
-    fn initialize(&mut self, price: u64, bumps: &InitializeOracleBumps, seed: u64) -> Result<()> {
+    fn initialize(
+        &mut self,
+        price: u64,
+        feed_id_hex: &str,
+        bumps: &InitializeOracleBumps,
+        seed: u64,
+    ) -> Result<()> {
         require_gt!(price, 0, LendingError::InvalidAmount);
+
+        // parse and store the feed ID at creation time so set_oracle_price
+        // uses the correct feed for this oracle regardless of the asset
+        let feed_id = get_feed_id_from_hex(feed_id_hex)
+            .map_err(|_| error!(LendingError::InvalidOraclePrice))?;
+
+        let clock = Clock::get()?;
 
         self.oracle.set_inner(StubOracle {
             authority: self.owner.key(),
             price,
             bump: bumps.oracle,
             seed,
+            feed_id,
+            last_updated_at: clock.unix_timestamp,
         });
 
         Ok(())
@@ -39,6 +55,8 @@ pub fn initialize_oracle_handler(
     ctx: Context<InitializeOracle>,
     seed: u64,
     price: u64,
+    feed_id_hex: String,
 ) -> Result<()> {
-    ctx.accounts.initialize(price, &ctx.bumps, seed)
+    ctx.accounts
+        .initialize(price, &feed_id_hex, &ctx.bumps, seed)
 }

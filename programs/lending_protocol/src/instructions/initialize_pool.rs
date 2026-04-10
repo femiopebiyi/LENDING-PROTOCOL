@@ -24,16 +24,12 @@ pub struct InitializePool<'info> {
     )]
     pub pool: Account<'info, LendingPool>,
 
-    #[account(
-        mint::token_program = token_program
-       
-    )]
+    #[account(mint::token_program = token_program)]
     pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mint::token_program = token_program,
         constraint = borrow_mint.key() != collateral_mint.key() @ LendingError::InvalidParameter,
-        
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -88,8 +84,7 @@ impl<'info> InitializePool<'info> {
             max_ltv > 0 && max_ltv < liquidation_threshold,
             LendingError::InvalidParameter
         );
-        require!(interest_rate > 0, LendingError::InvalidParameter);
-
+        // M-3: single combined check replaces two separate checks on interest_rate
         require!(
             interest_rate > 0 && interest_rate <= 5_000,
             LendingError::InvalidParameter
@@ -115,16 +110,9 @@ impl<'info> InitializePool<'info> {
             is_paused: false,
         });
 
-        require_keys_eq!(
-            self.borrow_mint.key(),
-            self.pool.borrow_mint.key(),
-            LendingError::InvalidMint
-        );
-        require_keys_eq!(
-            self.collateral_mint.key(),
-            self.pool.collateral_mint.key(),
-            LendingError::InvalidMint
-        );
+        // M-2: removed the two require_keys_eq! checks that were tautologies —
+        // they compared pool.borrow_mint against self.borrow_mint.key() immediately
+        // after set_inner assigned self.borrow_mint.key() to pool.borrow_mint.
 
         Ok(())
     }

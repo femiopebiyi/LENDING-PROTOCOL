@@ -21,7 +21,7 @@ pub struct Repay<'info> {
 
     #[account(
         mint::token_program = token_program,
-        address = pool.borrow_mint @LendingError::InvalidMint
+        address = pool.borrow_mint @ LendingError::InvalidMint
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -45,7 +45,7 @@ pub struct Repay<'info> {
         mut,
         seeds = [b"userposition", pool.key().as_ref(), repayer.key().as_ref()],
         bump = user_position.bump,
-        constraint = user_position.owner.key() == repayer.key() @LendingError::CredentialMismatch
+        constraint = user_position.owner.key() == repayer.key() @ LendingError::CredentialMismatch
     )]
     pub user_position: Account<'info, UserPosition>,
 
@@ -76,16 +76,56 @@ impl<'info> Repay<'info> {
 
         require!(total_debt > 0, LendingError::InsufficientBorrow);
 
-        // 4. Cap repay amount at total debt — user cannot overpay
+        // 4. Cap repay at total debt — cannot overpay
         let repay_amount = amount.min(total_debt);
 
-        // 5. Split payment — interest cleared first, remainder reduces principal
+        // 5. Split: clear interest first, remainder reduces principal
         let interest_payment = repay_amount.min(self.user_position.interest_accrued);
         let principal_payment = repay_amount
             .checked_sub(interest_payment)
             .ok_or(LendingError::Overflow)?;
 
-        // 6. Transfer tokens from user to vault — CPI before state changes
+        // 6. Update state before CPI (CEI pattern — H-3)
+        // If the borrow token has a Token-2022 transfer hook that calls back
+        // into the protocol, the updated (reduced) balances are already visible.
+        self.user_position.interest_accrued = self
+            .user_position
+            .interest_accrued
+            .checked_sub(interest_payment)
+            .ok_or(LendingError::Overflow)?;
+
+        self.user_position.borrowed_amount = self
+            .user_position
+            .borrowed_amount
+            .checked_sub(principal_payment)
+            .ok_or(LendingError::Overflow)?;
+
+        self.pool.total_borrowed = self
+            .pool
+            .total_borrowed
+            .checked_sub(principal_payment)
+            .ok_or(LendingError::Overflow)?;
+
+        self.pool.total_interest_accrued = self
+            .pool
+            .total_interest_accrued
+            .checked_add(interest_payment)
+            .ok_or(LendingError::Overflow)?;
+
+        // M-6: use checked addition for the closure test
+        let remaining_debt = self
+            .user_position
+            .borrowed_amount
+            .checked_add(self.user_position.interest_accrued)
+            .ok_or(LendingError::Overflow)?;
+
+        if remaining_debt == 0 {
+            self.user_position.is_open = false;
+        }
+
+        self.user_position.last_update_time = clock.unix_timestamp;
+
+        // 7. CPI: transfer repayment from user ATA to borrow vault
         transfer_checked(
             CpiContext::new(
                 self.token_program.to_account_info(),
@@ -99,38 +139,6 @@ impl<'info> Repay<'info> {
             repay_amount,
             self.borrow_mint.decimals,
         )?;
-
-        // 7. Update position — interest first, then principal
-        self.user_position.interest_accrued = self
-            .user_position
-            .interest_accrued
-            .checked_sub(interest_payment)
-            .ok_or(LendingError::Overflow)?;
-
-        self.user_position.borrowed_amount = self
-            .user_position
-            .borrowed_amount
-            .checked_sub(principal_payment)
-            .ok_or(LendingError::Overflow)?;
-
-        // 8. Update pool — only principal affects total_borrowed
-        self.pool.total_borrowed = self
-            .pool
-            .total_borrowed
-            .checked_sub(principal_payment)
-            .ok_or(LendingError::Overflow)?;
-
-        self.pool.total_interest_accrued = self
-            .pool
-            .total_interest_accrued
-            .checked_add(interest_payment)
-            .ok_or(LendingError::Overflow)?;
-
-        if self.user_position.borrowed_amount + self.user_position.interest_accrued == 0 {
-            self.user_position.is_open = false;
-        }
-
-        self.user_position.last_update_time = clock.unix_timestamp;
 
         Ok(())
     }

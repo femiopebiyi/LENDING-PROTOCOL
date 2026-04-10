@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
-use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{errors::LendingError, helpers::convert_pyth_price, state::StubOracle};
 
-const SOL_USD_FEED_ID: &str = "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
+// Maximum age in seconds a Pyth price is trusted for.
+pub const MAX_PRICE_AGE_SECS: u64 = 60;
 
 #[derive(Accounts)]
 pub struct SetOraclePrice<'info> {
@@ -18,7 +18,13 @@ pub struct SetOraclePrice<'info> {
     )]
     pub oracle: Account<'info, StubOracle>,
 
-    /// CHECK: deserialized and validated manually using Pyth SDK
+    // C-1: require this account to be owned by the Pyth receiver program.
+    // Using `owner =` forces Anchor to verify the account's program owner before
+    // we touch any data, preventing a fake account with crafted bytes from passing.
+    #[account(
+        owner = pyth_solana_receiver_sdk::ID @ LendingError::InvalidOracleProgram
+    )]
+    /// CHECK: owner verified by constraint above; data deserialized via Pyth SDK below
     pub price_update: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
@@ -26,7 +32,8 @@ pub struct SetOraclePrice<'info> {
 
 impl<'info> SetOraclePrice<'info> {
     fn set_oracle_price(&mut self) -> Result<()> {
-        // manually deserialize using Pyth SDK's own method
+        use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
+
         let data = self
             .price_update
             .try_borrow_data()
@@ -35,16 +42,21 @@ impl<'info> SetOraclePrice<'info> {
         let price_update = PriceUpdateV2::deserialize(&mut &data[8..])
             .map_err(|_| error!(LendingError::InvalidOraclePrice))?;
 
-        let feed_id = get_feed_id_from_hex(SOL_USD_FEED_ID)
-            .map_err(|_| error!(LendingError::InvalidOraclePrice))?;
+        // C-2: use the feed ID stored on the oracle account rather than a
+        // compile-time constant, so each pool's oracle uses the right price feed
+        let feed_id = self.oracle.feed_id;
 
+        let clock = Clock::get()?;
         let price = price_update
-            .get_price_no_older_than(&Clock::get()?, 60, &feed_id)
+            .get_price_no_older_than(&clock, MAX_PRICE_AGE_SECS, &feed_id)
             .map_err(|_| error!(LendingError::InvalidOraclePrice))?;
 
         let converted_price = convert_pyth_price(price.price, price.exponent)?;
 
         self.oracle.price = converted_price;
+        // L-2: record when this price was written so borrow/liquidate can
+        // reject it if it grows stale between oracle updates
+        self.oracle.last_updated_at = clock.unix_timestamp;
 
         Ok(())
     }

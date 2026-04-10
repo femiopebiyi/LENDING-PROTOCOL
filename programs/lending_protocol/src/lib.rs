@@ -16,8 +16,13 @@ pub mod lending_protocol {
 
     use super::*;
 
-    pub fn initialize_oracle(ctx: Context<InitializeOracle>, seed: u64, price: u64) -> Result<()> {
-        instructions::initialize_oracle::initialize_oracle_handler(ctx, seed, price)
+    pub fn initialize_oracle(
+        ctx: Context<InitializeOracle>,
+        seed: u64,
+        price: u64,
+        feed_id_hex: String, // <-- added
+    ) -> Result<()> {
+        instructions::initialize_oracle::initialize_oracle_handler(ctx, seed, price, feed_id_hex)
     }
 
     pub fn set_oracle_price(ctx: Context<SetOraclePrice>) -> Result<()> {

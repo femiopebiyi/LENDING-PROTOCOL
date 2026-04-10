@@ -8,20 +8,20 @@ pub struct PausePool<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
+    // H-2: mut is required for is_paused = true to be serialized back on-chain
     #[account(
+        mut,
         seeds = [b"lendingpool", pool.owner.as_ref(), pool.seed.to_le_bytes().as_ref()],
         bump = pool.bump,
-        has_one = owner @LendingError::CredentialMismatch
+        has_one = owner @ LendingError::CredentialMismatch
     )]
     pub pool: Account<'info, LendingPool>,
 }
 
 impl<'info> PausePool<'info> {
     fn pause_pool(&mut self) -> Result<()> {
-        require!(self.pool.is_paused == false, LendingError::AlreadyPaused);
-
+        require!(!self.pool.is_paused, LendingError::AlreadyPaused);
         self.pool.is_paused = true;
-
         Ok(())
     }
 }

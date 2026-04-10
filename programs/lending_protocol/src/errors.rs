@@ -42,4 +42,13 @@ pub enum LendingError {
     AlreadyUnpaused,
     #[msg("Pool is paused")]
     Paused,
+    #[msg("Position is already being liquidated")]
+    AlreadyLiquidating,
+    /// Pyth price_update account is not owned by the Pyth receiver program
+    #[msg("Invalid oracle program owner")]
+    InvalidOracleProgram,
+
+    /// Oracle price is older than MAX_ORACLE_AGE_SECS
+    #[msg("Oracle price is stale")]
+    StaleOracle,
 }

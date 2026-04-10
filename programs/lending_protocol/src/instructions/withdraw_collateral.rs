@@ -1,4 +1,3 @@
-// withdraw_collateral.rs
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
@@ -28,6 +27,12 @@ pub struct WithdrawCollateral<'info> {
     pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        mint::token_program = token_program,
+        address = pool.borrow_mint @ LendingError::InvalidMint
+    )]
+    pub borrow_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
         mut,
         associated_token::mint = collateral_mint,
         associated_token::authority = pool,
@@ -48,7 +53,7 @@ pub struct WithdrawCollateral<'info> {
         mut,
         seeds = [b"userposition", pool.key().as_ref(), withdrawer.key().as_ref()],
         bump = user_position.bump,
-        constraint = user_position.owner.key() == withdrawer.key() @LendingError::CredentialMismatch
+        constraint = user_position.owner.key() == withdrawer.key() @ LendingError::CredentialMismatch
     )]
     pub user_position: Account<'info, UserPosition>,
 
@@ -67,41 +72,57 @@ pub struct WithdrawCollateral<'info> {
 impl<'info> WithdrawCollateral<'info> {
     fn withdraw_collateral(&mut self, amount: u64) -> Result<()> {
         require!(!self.pool.is_paused, LendingError::Paused);
-        // 1. Validate inputs
         require!(amount > 0, LendingError::InvalidAmount);
         require!(
             amount <= self.user_position.collateral_deposited,
             LendingError::InsufficientCollateralBalance
         );
 
-        // 2. Settle interest before any balance changes
         let clock = Clock::get()?;
+
+        // 1. Settle interest before any balance changes
         accrue_interest(
             &mut self.user_position,
             clock.unix_timestamp,
             self.pool.interest_rate,
         )?;
 
-        // 3. Simulate health factor after withdrawal — only if there is outstanding debt
         let total_debt = self
             .user_position
             .borrowed_amount
             .checked_add(self.user_position.interest_accrued)
             .ok_or(LendingError::Overflow)?;
 
-        // 5. Update position balance
-        self.user_position.collateral_deposited = self
+        // 2. H-4: simulate the post-withdrawal collateral balance and run the
+        //    health check BEFORE mutating any state. This avoids the pattern of
+        //    writing state and then panicking — keeping the code safe to extend.
+        let simulated_collateral = self
             .user_position
             .collateral_deposited
             .checked_sub(amount)
             .ok_or(LendingError::Overflow)?;
 
         if total_debt > 0 {
-            let health = health_factor(&self.user_position, &self.pool, &self.oracle)?;
+            // Temporarily borrow a copy to pass to health_factor without
+            // mutating the real position yet.
+            let simulated_position = UserPosition {
+                collateral_deposited: simulated_collateral,
+                ..*self.user_position
+            };
+            let health = health_factor(
+                &simulated_position,
+                &self.pool,
+                &self.oracle,
+                self.collateral_mint.decimals,
+                self.borrow_mint.decimals,
+            )?;
             require!(health >= PRICE_SCALE, LendingError::InsufficientCollateral);
         }
 
-        // 4. Pool PDA signs to release collateral from vault
+        // 3. State is now known-safe to update
+        self.user_position.collateral_deposited = simulated_collateral;
+
+        // 4. CPI: pool PDA releases collateral to user
         let seeds = &[
             b"lendingpool",
             self.pool.owner.as_ref(),
@@ -125,14 +146,14 @@ impl<'info> WithdrawCollateral<'info> {
             self.collateral_mint.decimals,
         )?;
 
-        // 6. Update pool total
+        // 5. Update pool total
         self.pool.total_collateral = self
             .pool
             .total_collateral
             .checked_sub(amount)
             .ok_or(LendingError::Overflow)?;
 
-        // 7. Close position if fully withdrawn and no outstanding debt
+        // 6. Close position if fully withdrawn with no outstanding debt
         if self.user_position.collateral_deposited == 0 && self.user_position.borrowed_amount == 0 {
             self.user_position.is_open = false;
         }

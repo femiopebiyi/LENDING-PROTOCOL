@@ -1,4 +1,3 @@
-// withdraw_liquidity.rs
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
@@ -15,7 +14,9 @@ pub struct WithdrawLiquidity<'info> {
     #[account(mut)]
     pub withdrawer: Signer<'info>,
 
+    // H-1: pool must be mut so total_liquidity_deposited is serialized back
     #[account(
+        mut,
         seeds = [b"lendingpool", pool.owner.as_ref(), pool.seed.to_le_bytes().as_ref()],
         bump = pool.bump
     )]
@@ -64,10 +65,44 @@ impl<'info> WithdrawLiquidity<'info> {
             amount <= self.provider_info.amount_provided,
             LendingError::InsufficientLiquidity
         );
+
+        // H-5: pro-rata enforcement — a provider can only withdraw their
+        // proportional share of the currently *available* (unborrowed) liquidity.
+        // Without this, the first withdrawer can drain the vault at the expense
+        // of other providers when a large portion is currently lent out.
+        //
+        // available_share = amount_provided * vault_balance / total_deposited
+        let vault_balance = self.borrow_vault.amount as u128;
+        let total_deposited = self.pool.total_liquidity_deposited as u128;
+
+        require!(total_deposited > 0, LendingError::InsufficientLiquidity);
+
+        let available_share_u128 = (self.provider_info.amount_provided as u128)
+            .checked_mul(vault_balance)
+            .ok_or(LendingError::Overflow)?
+            .checked_div(total_deposited)
+            .ok_or(LendingError::Overflow)?;
+
+        let available_share =
+            u64::try_from(available_share_u128).map_err(|_| error!(LendingError::Overflow))?;
+
         require!(
-            self.borrow_vault.amount >= amount,
+            amount <= available_share,
             LendingError::InsufficientLiquidity
         );
+
+        // Update state before CPI (CEI — H-3)
+        self.provider_info.amount_provided = self
+            .provider_info
+            .amount_provided
+            .checked_sub(amount)
+            .ok_or(LendingError::Overflow)?;
+
+        self.pool.total_liquidity_deposited = self
+            .pool
+            .total_liquidity_deposited
+            .checked_sub(amount)
+            .ok_or(LendingError::Overflow)?;
 
         let seeds = &[
             b"lendingpool",
@@ -91,18 +126,6 @@ impl<'info> WithdrawLiquidity<'info> {
             amount,
             self.borrow_mint.decimals,
         )?;
-
-        self.provider_info.amount_provided = self
-            .provider_info
-            .amount_provided
-            .checked_sub(amount)
-            .ok_or(LendingError::Overflow)?;
-
-        self.pool.total_liquidity_deposited = self
-            .pool
-            .total_liquidity_deposited
-            .checked_sub(amount)
-            .ok_or(LendingError::Overflow)?;
 
         Ok(())
     }

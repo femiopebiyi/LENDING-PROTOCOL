@@ -11,4 +11,5 @@ pub struct UserPosition {
     pub last_update_time: i64,     // unix timestamp of last interest settlement
     pub bump: u8,
     pub is_open: bool,
+    pub is_liquidating: bool,
 }

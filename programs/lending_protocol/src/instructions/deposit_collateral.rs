@@ -61,7 +61,8 @@ impl<'info> DepositCollateral<'info> {
         require!(amount > 0, LendingError::InvalidAmount);
 
         let clock = Clock::get()?;
-        // 2. Initialize position on first deposit
+
+        // 1. Initialise position on first deposit, or accrue interest on subsequent ones
         if !self.user_position.is_open {
             self.user_position.is_open = true;
             self.user_position.owner = self.depositor.key();
@@ -79,6 +80,22 @@ impl<'info> DepositCollateral<'info> {
             )?;
         }
 
+        // 2. Update state before CPI (CEI pattern — H-3)
+        // If the token has a Token-2022 transfer hook that re-enters this program,
+        // it will see the already-updated balances and cannot double-count the deposit.
+        self.user_position.collateral_deposited = self
+            .user_position
+            .collateral_deposited
+            .checked_add(amount)
+            .ok_or(LendingError::Overflow)?;
+
+        self.pool.total_collateral = self
+            .pool
+            .total_collateral
+            .checked_add(amount)
+            .ok_or(LendingError::Overflow)?;
+
+        // 3. CPI: transfer collateral from user to vault
         transfer_checked(
             CpiContext::new(
                 self.token_program.to_account_info(),
@@ -92,18 +109,6 @@ impl<'info> DepositCollateral<'info> {
             amount,
             self.collateral_mint.decimals,
         )?;
-
-        self.user_position.collateral_deposited = self
-            .user_position
-            .collateral_deposited
-            .checked_add(amount)
-            .ok_or(LendingError::Overflow)?;
-
-        self.pool.total_collateral = self
-            .pool
-            .total_collateral
-            .checked_add(amount)
-            .ok_or(LendingError::Overflow)?;
 
         Ok(())
     }
