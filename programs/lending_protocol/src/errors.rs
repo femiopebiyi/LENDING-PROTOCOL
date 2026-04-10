@@ -32,4 +32,8 @@ pub enum LendingError {
     BorrowAlive,
     #[msg("Cannot liquidate your own position")]
     CannotLiquidateSelf,
+    #[msg("Invalid Oracle")]
+    InvalidOracle,
+    #[msg("Invalid or stale oracle price")]
+    InvalidOraclePrice,
 }

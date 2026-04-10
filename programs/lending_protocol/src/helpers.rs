@@ -69,3 +69,34 @@ pub fn health_factor(
 
     Ok(health)
 }
+
+pub fn convert_pyth_price(price: i64, exponent: i32) -> Result<u64> {
+    // Pyth prices can be negative during errors — reject them
+    require!(price > 0, LendingError::InvalidOraclePrice);
+
+    let price = price as u128;
+
+    // PRICE_SCALE = 1_000_000 (6 decimals)
+    // Pyth exponent is typically -8, meaning price has 8 decimal places
+    // we need to adjust to our 6 decimal scale
+
+    let adjusted = if exponent < 0 {
+        let exp = (-exponent) as u32;
+        let pyth_scale = 10u128.pow(exp);
+
+        price
+            .checked_mul(PRICE_SCALE)
+            .ok_or(LendingError::Overflow)?
+            .checked_div(pyth_scale)
+            .ok_or(LendingError::Overflow)?
+    } else {
+        let exp = exponent as u32;
+        price
+            .checked_mul(PRICE_SCALE)
+            .ok_or(LendingError::Overflow)?
+            .checked_mul(10u128.pow(exp))
+            .ok_or(LendingError::Overflow)?
+    };
+
+    u64::try_from(adjusted).map_err(|_| error!(LendingError::Overflow))
+}

@@ -22,6 +22,7 @@ pub struct Borrow<'info> {
 
     #[account(
         mint::token_program = token_program,
+        address = pool.borrow_mint @ LendingError::InvalidMint
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -53,6 +54,7 @@ pub struct Borrow<'info> {
     #[account(
         seeds = [b"stuboracle", oracle.authority.as_ref(), oracle.seed.to_le_bytes().as_ref()],
         bump = oracle.bump,
+        constraint = oracle.key() == pool.oracle @ LendingError::InvalidOracle
     )]
     pub oracle: Account<'info, StubOracle>,
 

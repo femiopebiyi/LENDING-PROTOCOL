@@ -19,8 +19,8 @@ pub mod lending_protocol {
         instructions::initialize_oracle::initialize_oracle_handler(ctx, seed, price)
     }
 
-    pub fn set_oracle_price(ctx: Context<SetOraclePrice>, price: u64) -> Result<()> {
-        instructions::set_oracle_price::set_oracle_price_handler(ctx, price)
+    pub fn set_oracle_price(ctx: Context<SetOraclePrice>) -> Result<()> {
+        instructions::set_oracle_price::set_oracle_price_handler(ctx)
     }
 
     pub fn initialize_pool(

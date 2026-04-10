@@ -5,8 +5,8 @@ use anchor_spl::{
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
-use crate::helpers::health_factor;
 use crate::state::{LendingPool, StubOracle, UserPosition};
+use crate::{constants::PRICE_SCALE, helpers::health_factor};
 use crate::{errors::LendingError, helpers::accrue_interest};
 
 #[derive(Accounts)]
@@ -23,6 +23,7 @@ pub struct WithdrawCollateral<'info> {
 
     #[account(
         mint::token_program = token_program,
+        address = pool.collateral_mint @ LendingError::InvalidMint
     )]
     pub collateral_mint: InterfaceAccount<'info, Mint>,
 
@@ -54,6 +55,7 @@ pub struct WithdrawCollateral<'info> {
     #[account(
         seeds = [b"stuboracle", oracle.authority.as_ref(), oracle.seed.to_le_bytes().as_ref()],
         bump = oracle.bump,
+        constraint = oracle.key() == pool.oracle @ LendingError::InvalidOracle
     )]
     pub oracle: Account<'info, StubOracle>,
 
@@ -86,15 +88,16 @@ impl<'info> WithdrawCollateral<'info> {
             .checked_add(self.user_position.interest_accrued)
             .ok_or(LendingError::Overflow)?;
 
-        if total_debt > 0 {
-            let effective_collateral =
-                health_factor(&self.user_position, &self.pool, &self.oracle)?;
+        // 5. Update position balance
+        self.user_position.collateral_deposited = self
+            .user_position
+            .collateral_deposited
+            .checked_sub(amount)
+            .ok_or(LendingError::Overflow)?;
 
-            // reject if post-withdrawal health factor would drop below 1.0
-            require!(
-                effective_collateral >= total_debt as u128,
-                LendingError::InsufficientCollateral
-            );
+        if total_debt > 0 {
+            let health = health_factor(&self.user_position, &self.pool, &self.oracle)?;
+            require!(health >= PRICE_SCALE, LendingError::InsufficientCollateral);
         }
 
         // 4. Pool PDA signs to release collateral from vault
@@ -120,13 +123,6 @@ impl<'info> WithdrawCollateral<'info> {
             amount,
             self.collateral_mint.decimals,
         )?;
-
-        // 5. Update position balance
-        self.user_position.collateral_deposited = self
-            .user_position
-            .collateral_deposited
-            .checked_sub(amount)
-            .ok_or(LendingError::Overflow)?;
 
         // 6. Update pool total
         self.pool.total_collateral = self
