@@ -17,4 +17,7 @@ pub struct LendingPool {
     pub total_borrowed: u64,        // total tokens currently borrowed
     pub bump: u8,
     pub seed: u64,
+    pub total_interest_accrued: u64,
+    pub total_liquidity_deposited: u64,
+    pub is_paused: bool,
 }

@@ -6,3 +6,6 @@ pub use user_position::*;
 
 pub mod oracle;
 pub use oracle::*;
+
+pub mod liquidity_provider;
+pub use liquidity_provider::*;

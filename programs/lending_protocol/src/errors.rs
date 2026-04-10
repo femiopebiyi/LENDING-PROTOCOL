@@ -36,4 +36,10 @@ pub enum LendingError {
     InvalidOracle,
     #[msg("Invalid or stale oracle price")]
     InvalidOraclePrice,
+    #[msg("Pool is paused already")]
+    AlreadyPaused,
+    #[msg("Pool is open already")]
+    AlreadyUnpaused,
+    #[msg("Pool is paused")]
+    Paused,
 }

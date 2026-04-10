@@ -120,6 +120,12 @@ impl<'info> Repay<'info> {
             .checked_sub(principal_payment)
             .ok_or(LendingError::Overflow)?;
 
+        self.pool.total_interest_accrued = self
+            .pool
+            .total_interest_accrued
+            .checked_add(interest_payment)
+            .ok_or(LendingError::Overflow)?;
+
         if self.user_position.borrowed_amount + self.user_position.interest_accrued == 0 {
             self.user_position.is_open = false;
         }

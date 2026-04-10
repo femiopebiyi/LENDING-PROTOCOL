@@ -94,6 +94,7 @@ pub struct Liquidate<'info> {
 
 impl<'info> Liquidate<'info> {
     fn liquidate(&mut self, repay_amount: u64) -> Result<()> {
+        require!(!self.pool.is_paused, LendingError::Paused);
         // 1. Validate
         require!(repay_amount > 0, LendingError::InvalidAmount);
 

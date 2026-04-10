@@ -57,6 +57,7 @@ pub struct DepositCollateral<'info> {
 
 impl<'info> DepositCollateral<'info> {
     fn deposit_collateral(&mut self, amount: u64, bumps: &DepositCollateralBumps) -> Result<()> {
+        require!(!self.pool.is_paused, LendingError::Paused);
         require!(amount > 0, LendingError::InvalidAmount);
 
         let clock = Clock::get()?;

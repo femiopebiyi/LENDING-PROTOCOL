@@ -21,3 +21,15 @@ pub use withdraw_collateral::*;
 
 pub mod liquidate;
 pub use liquidate::*;
+
+pub mod add_liquidity;
+pub use add_liquidity::*;
+
+pub mod withdraw_liquidity;
+pub use withdraw_liquidity::*;
+
+pub mod pause_pool;
+pub use pause_pool::*;
+
+pub mod unpause_pool;
+pub use unpause_pool::*;

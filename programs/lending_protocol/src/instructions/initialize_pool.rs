@@ -25,15 +25,15 @@ pub struct InitializePool<'info> {
     pub pool: Account<'info, LendingPool>,
 
     #[account(
-        mint::token_program = token_program,
-        address = pool.collateral_mint @ LendingError::InvalidMint
+        mint::token_program = token_program
+       
     )]
     pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mint::token_program = token_program,
         constraint = borrow_mint.key() != collateral_mint.key() @ LendingError::InvalidParameter,
-        address = pool.borrow_mint @ LendingError::InvalidMint
+        
     )]
     pub borrow_mint: InterfaceAccount<'info, Mint>,
 
@@ -90,6 +90,11 @@ impl<'info> InitializePool<'info> {
         );
         require!(interest_rate > 0, LendingError::InvalidParameter);
 
+        require!(
+            interest_rate > 0 && interest_rate <= 5_000,
+            LendingError::InvalidParameter
+        );
+
         self.pool.set_inner(LendingPool {
             owner: self.owner.key(),
             collateral_mint: self.collateral_mint.key(),
@@ -105,7 +110,21 @@ impl<'info> InitializePool<'info> {
             total_borrowed: 0,
             bump: bumps.pool,
             seed,
+            total_interest_accrued: 0,
+            total_liquidity_deposited: 0,
+            is_paused: false,
         });
+
+        require_keys_eq!(
+            self.borrow_mint.key(),
+            self.pool.borrow_mint.key(),
+            LendingError::InvalidMint
+        );
+        require_keys_eq!(
+            self.collateral_mint.key(),
+            self.pool.collateral_mint.key(),
+            LendingError::InvalidMint
+        );
 
         Ok(())
     }

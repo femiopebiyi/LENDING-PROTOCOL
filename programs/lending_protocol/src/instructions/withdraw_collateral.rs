@@ -66,6 +66,7 @@ pub struct WithdrawCollateral<'info> {
 
 impl<'info> WithdrawCollateral<'info> {
     fn withdraw_collateral(&mut self, amount: u64) -> Result<()> {
+        require!(!self.pool.is_paused, LendingError::Paused);
         // 1. Validate inputs
         require!(amount > 0, LendingError::InvalidAmount);
         require!(

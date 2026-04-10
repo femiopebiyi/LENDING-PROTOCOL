@@ -12,7 +12,12 @@ pub fn accrue_interest(
 ) -> Result<()> {
     let time_elapsed = current_time.saturating_sub(position.last_update_time) as u128;
 
-    let interest = (position.borrowed_amount as u128)
+    let total_debt = position
+        .borrowed_amount
+        .checked_add(position.interest_accrued)
+        .ok_or(LendingError::Overflow)?;
+
+    let interest = (total_debt as u128)
         .checked_mul(interest_rate as u128)
         .ok_or(LendingError::Overflow)?
         .checked_mul(time_elapsed)

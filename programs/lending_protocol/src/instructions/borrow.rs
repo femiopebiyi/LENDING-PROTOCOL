@@ -65,6 +65,7 @@ pub struct Borrow<'info> {
 
 impl<'info> Borrow<'info> {
     fn borrow(&mut self, amount: u64) -> Result<()> {
+        require!(!self.pool.is_paused, LendingError::Paused);
         // 1. Validate — collateral check first before any math runs
         require!(amount > 0, LendingError::InvalidAmount);
         require!(

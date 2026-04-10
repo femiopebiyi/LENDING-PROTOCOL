@@ -13,6 +13,7 @@ mod helpers;
 
 #[program]
 pub mod lending_protocol {
+
     use super::*;
 
     pub fn initialize_oracle(ctx: Context<InitializeOracle>, seed: u64, price: u64) -> Result<()> {
@@ -59,5 +60,21 @@ pub mod lending_protocol {
 
     pub fn liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()> {
         instructions::liquidate::liquidate_handler(ctx, repay_amount)
+    }
+
+    pub fn add_liquidity(ctx: Context<AddLiquidity>, amount: u64) -> Result<()> {
+        instructions::add_liquidity::add_liquidity_handler(ctx, amount)
+    }
+
+    pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, amount: u64) -> Result<()> {
+        instructions::withdraw_liquidity::withdraw_liquidity_handler(ctx, amount)
+    }
+
+    pub fn pause_pool(ctx: Context<PausePool>) -> Result<()> {
+        instructions::pause_pool::pause_pool_handler(ctx)
+    }
+
+    pub fn unpause_pool(ctx: Context<UnpausePool>) -> Result<()> {
+        instructions::unpause_pool::unpause_pool_handler(ctx)
     }
 }

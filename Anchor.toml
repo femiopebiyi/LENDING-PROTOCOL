@@ -16,4 +16,10 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test-oracle   = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'oracle'"
+test-pool     = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'initialize_pool'"
+test-deposit  = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'deposit_collateral'"
+test-borrow   = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'borrow'"
+test-repay    = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'repay'"
+test-withdraw = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'withdraw_collateral'"
+test-liquidate = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep 'liquidate'"
